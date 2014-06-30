@@ -2,7 +2,16 @@
 
   (function(window, document) {
     var Slidesjs,
-        navigationClass = 'slidesjs-navigation';
+        navigationClass = 'slidesjs-navigation',
+        slideStyles = {
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          zIndex: 0,
+          display: 'none',
+          webkitBackfaceVisibility: 'hidden'          
+        };
 
     Slidesjs = function(element, opts){
       this.element = element;
@@ -62,9 +71,9 @@
       this.data = {
         animating : false,
         touch : false,
-        current : _this.options.start - 1,
+        current : ( _this.options.start - 1 ),
         vendorPrefix : null,
-        slides : 0,
+        slidesCount : 0,
         total : null
       };
 
@@ -80,160 +89,244 @@
       // wrap all slides with a div
       var len = _this.element.children.length;
 
-      this.slidesContainer = document.createElement('div');
+      this.slidesControl = document.createElement('div');
 
       // loop over every child of the main element
       while(len--){
+        var slide = this.element.children[len];
         // if it's not the navigation then it's a slide so...
-        if ( _this.element.children[len].className !== navigationClass ) {
+        if ( slide.className !== navigationClass ) {
           // count it as a slide
-          this.data.slides += 1;
-          console.log(_this.data.slides)
+          this.data.slidesCount += 1;
+          slide.setAttribute('class', 'slidesjs-slide');
+          // set stylings as needed for each img
+          for ( prop in slideStyles){
+            slide.style[prop] = slideStyles[prop];
+          }
+          //slide.style.display = 'none';
+          //slide.setAttribute('class', 'slidesjs-slide');
+          // set the position in a custom attr
+          slide.setAttribute('slidesjs-index', len);
           // and insert it as the first child of the new wrapping div
           // (mind that that we're looping in reverse order)
-          this.slidesContainer.insertBefore(_this.element.children[len], this.slidesContainer.firstChild);
+          this.slidesControl.insertBefore(slide, this.slidesControl.firstChild);
         }
       }
-      // finally isert the new div
-      this.element.insertBefore(this.slidesContainer, this.element.firstChild);
+      this.slidesControl.style.position = 'relative';
+      this.slidesControl.style.overflow = 'hidden';
+
+      this.slidesContainer = document.createElement('div');
+      this.slidesContainer.style.position = 'relative';
+      this.slidesContainer.style.left = 0;
+
+      this.slidesContainer.insertBefore(this.slidesControl, this.slidesContainer.firstChild);
+      this.element.insertBefore(this.slidesContainer, this.element.firstChild);  
 
       this.slidesContainer.setAttribute('class', 'slidesjs-container');
-      this.slidesContainer.style.position = 'relative';
-      this.slidesContainer.style.overflow = 'hidden';
-    };
-/*
-    Plugin.prototype.init = function() {
+      this.slidesControl.setAttribute('class', 'slidesjs-control');
 
-
-      $(".slidesjs-container", $element).wrapInner("<div class='slidesjs-control'>", $element).children();
-      $(".slidesjs-control", $element).css({
-        position: "relative",
-        left: 0
-      });
-      $(".slidesjs-control", $element).children().addClass("slidesjs-slide").css({
-        position: "absolute",
-        top: 0,
-        left: 0,
-        width: "100%",
-        zIndex: 0,
-        display: "none",
-        webkitBackfaceVisibility: "hidden"
-      });
-      $.each($(".slidesjs-control", $element).children(), function(i) {
-        var $slide;
-        $slide = $(this);
-        return $slide.attr("slidesjs-index", i);
-      });
       if (this.data.touch) {
-        $(".slidesjs-control", $element).on("touchstart", function(e) {
+        this.slidesControl.addEventListener('touchstart', function(e){
           return _this._touchstart(e);
         });
-        $(".slidesjs-control", $element).on("touchmove", function(e) {
-          return _this._touchmove(e);
+        this.slidesControl.addEventListener('touchmove', function(e){
+          return _this._touchmove(e);          
         });
-        $(".slidesjs-control", $element).on("touchend", function(e) {
-          return _this._touchend(e);
+        this.slidesControl.addEventListener('touchend', function(e){
+          return _this._touchend(e);          
         });
+
       }
-      $element.fadeIn(0);
-      this.update();
+
+      this.element.style.display = 'block';
+      // TODO: uncomment
+      //this.update();
+
+      // TODO: refactor and put it inside the first if.. with eventlisteners
       if (this.data.touch) {
-        this._setuptouch();
+          // TODO: uncomment
+          //this._setuptouch();
       }
-      $(".slidesjs-control", $element).children(":eq(" + this.data.current + ")").eq(0).fadeIn(0, function() {
-        return $(this).css({
-          zIndex: 10
-        });
-      });
+
+      console.log(this.data.current, this.options.start )
+
+      this.slides = this.slidesControl.children;
+      this.slides[ this.data.current ].style.display = 'block';
+      this.slides[ this.data.current ].style.zIndex = 10;
+      
       if (this.options.navigation.active) {
-        prevButton = $("<a>", {
-          "class": "slidesjs-previous slidesjs-navigation",
-          href: "#",
-          title: "Previous",
-          text: "Previous"
-        }).appendTo($element);
-        nextButton = $("<a>", {
-          "class": "slidesjs-next slidesjs-navigation",
-          href: "#",
-          title: "Next",
-          text: "Next"
-        }).appendTo($element);
-      }
-      $(".slidesjs-next", $element).click(function(e) {
-        e.preventDefault();
-        _this.stop(true);
-        return _this.next(_this.options.navigation.effect);
-      });
-      $(".slidesjs-previous", $element).click(function(e) {
-        e.preventDefault();
-        _this.stop(true);
-        return _this.previous(_this.options.navigation.effect);
-      });
-      if (this.options.play.active) {
-        playButton = $("<a>", {
-          "class": "slidesjs-play slidesjs-navigation",
-          href: "#",
-          title: "Play",
-          text: "Play"
-        }).appendTo($element);
-        stopButton = $("<a>", {
-          "class": "slidesjs-stop slidesjs-navigation",
-          href: "#",
-          title: "Stop",
-          text: "Stop"
-        }).appendTo($element);
-        playButton.click(function(e) {
+        prevButton = document.createElement('a');
+        prevButton.innerHTML = 'Previous';
+        this.element.appendChild(prevButton);
+        nextButton = document.createElement('a');
+        nextButton.innerHTML = 'Next';
+        this.element.appendChild(nextButton);
+
+        // TODO: refactor with a custom unified event
+        prevButton.href = '#';
+        nextButton.href = '#';
+        prevButton.setAttribute('title', 'Previous');        
+        nextButton.setAttribute('title', 'Next');        
+        prevButton.setAttribute('class', 'slidesjs-previous slidesjs-navigation');        
+        nextButton.setAttribute('class', 'slidesjs-next slidesjs-navigation');
+
+        // TODO: refactor with evt delegation & unique method for both
+        prevButton.addEventListener('click', function(e){
           e.preventDefault();
-          return _this.play(true);
+          alert('hi')
+          _this.stop(true);
+          _this.previous(_this.options.navigation.effect);
         });
-        stopButton.click(function(e) {
+        nextButton.addEventListener('click', function(e){
           e.preventDefault();
-          return _this.stop(true);
+          alert('hiss')
+          _this.stop(true);
+          _this.next(_this.options.navigation.effect);
+        });
+      }
+
+      if (this.options.play.active) {
+        playButton = document.createElement('a');
+        playButton.innerHTML = 'Play';
+        this.element.appendChild(playButton);
+        stopButton = document.createElement('a');
+        stopButton.innerHTML = 'Stop';
+        this.element.appendChild(stopButton);
+
+        // TODO: refactor with a custom unified event
+        playButton.href = '#';
+        stopButton.href = '#';
+        playButton.setAttribute('title', 'play');        
+        stopButton.setAttribute('title', 'stop');        
+        playButton.setAttribute('class', 'slidesjs-play slidesjs-navigation');        
+        stopButton.setAttribute('class', 'slidesjs-stop slidesjs-navigation');
+
+        playButton.addEventListener('click', function(e){
+          e.preventDefault();
+          _this.play(true);
+        });
+        stopButton.addEventListener('click', function(e){
+          e.preventDefault();
+          _this.stop(true);
         });
         if (this.options.play.swap) {
-          stopButton.css({
-            display: "none"
+          stopButton.style.display = 'none';
+        }
+      }
+
+      if (this.options.pagination.active) {
+        pagination = document.createElement('ul');
+        this.element.appendChild(pagination);
+
+        console.log(this.data.slidesCount)
+        
+
+        for ( var i = 0; i <  this.data.slidesCount ; i++){
+          var paginationItem, paginationLink;
+          paginationItem = document.createElement('li');
+          paginationLink = document.createElement('a');
+
+          paginationItem.className = 'slidesjs-pagination'; 
+          paginationLink.setAttribute('data-slidesjs-item', i);
+          paginationLink.href = '#';
+          paginationLink.innerHTML = i + 1;
+
+          pagination.appendChild(paginationItem);
+          paginationItem.appendChild(paginationLink);
+
+          // TODO: refactor with evt delegation on ul rather that each li
+          paginationLink.addEventListener('click', function(e){
+            e.preventDefault();
+            _this.stop(true);
+
+            var selectedSlide = e.currentTarget.getAttribute('data-slidesjs-item');
+            _this.goto( (selectedSlide * 1) + 1);
           });
         }
       }
-      if (this.options.pagination.active) {
-        pagination = $("<ul>", {
-          "class": "slidesjs-pagination"
-        }).appendTo($element);
-        $.each(new Array(this.data.total), function(i) {
-          var paginationItem, paginationLink;
-          paginationItem = $("<li>", {
-            "class": "slidesjs-pagination-item"
-          }).appendTo(pagination);
-          paginationLink = $("<a>", {
-            href: "#",
-            "data-slidesjs-item": i,
-            html: i + 1
-          }).appendTo(paginationItem);
-          return paginationLink.click(function(e) {
-            e.preventDefault();
-            _this.stop(true);
-            return _this.goto(($(e.currentTarget).attr("data-slidesjs-item") * 1) + 1);
-          });
-        });
-      }
-      $(window).bind("resize", function() {
-        return _this.update();
+      window.addEventListener('resize', function(){
+        _this.update();
       });
+
+      // get the original dimensions of the 1st image
+      this._getImgSize( this.slides[0].src );
       this._setActive();
       if (this.options.play.auto) {
         this.play();
       }
       return this.options.callback.loaded(this.options.start);
     };
-    Plugin.prototype._setActive = function(number) {
-      var $element, current;
-      $element = $(this.element);
-      this.data = $.data(this);
-      current = number > -1 ? number : this.data.current;
-      $(".active", $element).removeClass("active");
-      return $(".slidesjs-pagination li:eq(" + current + ") a", $element).addClass("active");
+
+    Slidesjs.prototype._getImgSize = function(imgSrc) {
+      var newImg = new Image()
+          _this = this;
+
+      newImg.onload = function() {
+        _this.data.imgHeight =  newImg.height;
+        _this.data.imgWidth = newImg.width; 
+      }
+
+      newImg.src = imgSrc; // this must be done AFTER setting onload
     };
+
+    Slidesjs.prototype._setActive = function(number) {
+      var current;
+
+      current = number > -1 ? number : this.data.current;
+      var active = this.element.getElementsByClassName('active');
+              console.log(active)
+
+      if ( active[0] !== undefined ){
+        // TODO: possible clash if the user sets his own class
+        // rewrite with classList.add & remove logic
+        active[0].classList.remove('active');
+      }
+      this.slides[ current ].className += ' active';
+      this.update();
+    };
+
+    Slidesjs.prototype.update = function() {
+      var height, width;
+      for ( i = 0; i < this.data.slidesCount; i++ ){
+        if ( i !== this.data.current ){
+          this.slides[i].style.display = 'none';
+          this.slides[i].style.left = '0';
+          this.slides[i].style.zIndex = '0';
+        }
+      }
+
+      width = parseInt(window.getComputedStyle(this.slides[ this.data.current ]).getPropertyValue('width'));
+      height = window.getComputedStyle(this.slides[ this.data.current ]).getPropertyValue('height');
+      console.log(height)
+      this.options.width = ( width * parseInt(this.data.imgWidth) ) / parseInt(this.data.imgHeight);
+      console.log( this.data.imgWidth )
+      this.options.height = height;
+      this.slidesControl.style.width = width;
+      this.slidesControl.style.height = height;
+
+    };
+
+    // Plugin.prototype.update = function() {
+    //   var $element, height, width;
+    //   $element = $(this.element);
+    //   this.data = $.data(this);
+    //   $(".slidesjs-control", $element).children(":not(:eq(" + this.data.current + "))").css({
+    //     display: "none",
+    //     left: 0,
+    //     zIndex: 0
+    //   });
+    //   width = $element.width();
+    //   height = (this.options.height / this.options.width) * width;
+    //   this.options.width = width;
+    //   this.options.height = height;
+    //   return $(".slidesjs-control, .slidesjs-container", $element).css({
+    //     width: width,
+    //     height: height
+    //   });
+    // };
+
+/*
+
     Plugin.prototype.update = function() {
       var $element, height, width;
       $element = $(this.element);
