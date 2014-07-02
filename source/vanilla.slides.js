@@ -16,6 +16,11 @@
     Slidesjs = function(element, opts){
       this.element = element;
       this.slidesContainer;
+      this.nextButton;
+      this.prevButton;
+      this.playButton;
+      this.stopButton;
+
       // Default options
       this.options = {
           width: 940,
@@ -30,7 +35,7 @@
             effect: "slide"
           },
           play: {
-            active: false,
+            active: true, // TODO: set to false by def.
             effect: "slide",
             interval: 5000,
             auto: false,
@@ -40,7 +45,7 @@
           },
           effect: {
             slide: {
-              speed: 500
+              speed: 5000
             },
             fade: {
               speed: 300,
@@ -62,22 +67,47 @@
       this.init();
     };
 
-    Slidesjs.prototype.init = function(){
-      console.log(this);
-
-      var element, nextButton, pagination, playButton, prevButton, stopButton,
-        _this = this;
+    Slidesjs.prototype.init = function(imgSrc) {
+      var newImg = new Image(),
+          _this = this;
 
       this.data = {
         animating : false,
+        scrolling: false,
         touch : false,
         current : ( _this.options.start - 1 ),
         vendorPrefix : null,
         slidesCount : 0,
-        total : null
+        total : null,
+        originalH : null,
+        originalW : null,
+        direction : null,
+        // width & height of the slides, assigned in the 'update' method
+        width : null,
+        height : null,
+
+        touchTimer : null,
+        touchStartX : null,
+        touchStartY : null
       };
 
-      //this.data.total = _this.data.slides.length;
+      // TODO: give the possibility to pass values on instantiation so to skip this part
+      // and go straight to setup
+      newImg.onload = function() {
+        _this.data.originalH =  newImg.height;
+        _this.data.originalW = newImg.width; 
+
+        _this.setup();
+      }
+      // get the src of the given image or default to the starting one so we now that the first
+      // image visibile is loaded and then we kick everything off.
+      newImg.src = imgSrc || this.element.getElementsByTagName('img')[this.data.current].src; // this must be done AFTER setting onload
+    };
+
+    Slidesjs.prototype.setup = function(){
+
+      var element, nextButton, pagination, playButton, prevButton, stopButton,
+        _this = this;
 
       if (typeof TouchEvent !== "undefined") {
         this.data.touch = true;
@@ -139,18 +169,12 @@
       }
 
       this.element.style.display = 'block';
-      // TODO: uncomment
-      //this.update();
-
-      // TODO: refactor and put it inside the first if.. with eventlisteners
-      if (this.data.touch) {
-          // TODO: uncomment
-          //this._setuptouch();
-      }
 
       console.log(this.data.current, this.options.start )
 
       this.slides = this.slidesControl.children;
+      this.data.total = _this.slides.length;
+
       this.slides[ this.data.current ].style.display = 'block';
       this.slides[ this.data.current ].style.zIndex = 10;
       
@@ -183,6 +207,9 @@
           _this.stop(true);
           _this.next(_this.options.navigation.effect);
         });
+
+        this.nextButton = nextButton;
+        this.prevButton = prevButton;
       }
 
       if (this.options.play.active) {
@@ -201,6 +228,10 @@
         playButton.setAttribute('class', 'slidesjs-play slidesjs-navigation');        
         stopButton.setAttribute('class', 'slidesjs-stop slidesjs-navigation');
 
+        this.playButton = playButton;
+        this.stopButton = stopButton;
+        console.log(this.playButton)
+
         playButton.addEventListener('click', function(e){
           e.preventDefault();
           _this.play(true);
@@ -212,6 +243,7 @@
         if (this.options.play.swap) {
           stopButton.style.display = 'none';
         }
+
       }
 
       if (this.options.pagination.active) {
@@ -240,33 +272,28 @@
             _this.stop(true);
 
             var selectedSlide = e.currentTarget.getAttribute('data-slidesjs-item');
-            _this.goto( (selectedSlide * 1) + 1);
+            _this.goTo( (selectedSlide * 1) + 1);
           });
         }
       }
       window.addEventListener('resize', function(){
+        // TODO: consider throttling and deboucing this event to avoid too many firings
         _this.update();
       });
 
-      // get the original dimensions of the 1st image
-      this._getImgSize( this.slides[0].src );
       this._setActive();
       if (this.options.play.auto) {
         this.play();
       }
-      return this.options.callback.loaded(this.options.start);
-    };
-
-    Slidesjs.prototype._getImgSize = function(imgSrc) {
-      var newImg = new Image()
-          _this = this;
-
-      newImg.onload = function() {
-        _this.data.imgHeight =  newImg.height;
-        _this.data.imgWidth = newImg.width; 
+      // TODO: refactor and put it inside the first if.. with eventlisteners
+      // mind that this goes after dimensions of imgs have been calculated
+      if (this.data.touch) {
+          // TODO: uncomment
+          this._setuptouch();
       }
 
-      newImg.src = imgSrc; // this must be done AFTER setting onload
+
+      return this.options.callback.loaded(this.options.start);
     };
 
     Slidesjs.prototype._setActive = function(number) {
@@ -282,109 +309,61 @@
         active[0].classList.remove('active');
       }
       this.slides[ current ].className += ' active';
+      this.data.current = current;
       this.update();
     };
 
     Slidesjs.prototype.update = function() {
       var height, width;
-      for ( i = 0; i < this.data.slidesCount; i++ ){
+      for ( var i = 0; i < this.data.slidesCount; i++ ){
         if ( i !== this.data.current ){
           this.slides[i].style.display = 'none';
           this.slides[i].style.left = '0';
           this.slides[i].style.zIndex = '0';
         }
       }
+      this.data.width = this.element.getBoundingClientRect().width;
+      // set height in order to keep proportions with original img
+      this.data.height = Math.round( this.data.originalH * this.data.width / this.data.originalW );
 
-      width = parseInt(window.getComputedStyle(this.slides[ this.data.current ]).getPropertyValue('width'));
-      height = window.getComputedStyle(this.slides[ this.data.current ]).getPropertyValue('height');
-      console.log(height)
-      this.options.width = ( width * parseInt(this.data.imgWidth) ) / parseInt(this.data.imgHeight);
-      console.log( this.data.imgWidth )
-      this.options.height = height;
-      this.slidesControl.style.width = width;
-      this.slidesControl.style.height = height;
+      this.slidesControl.style.width = this.data.width + 'px';
+      this.slidesControl.style.height = this.data.height + 'px';
 
     };
 
-    // Plugin.prototype.update = function() {
-    //   var $element, height, width;
-    //   $element = $(this.element);
-    //   this.data = $.data(this);
-    //   $(".slidesjs-control", $element).children(":not(:eq(" + this.data.current + "))").css({
-    //     display: "none",
-    //     left: 0,
-    //     zIndex: 0
-    //   });
-    //   width = $element.width();
-    //   height = (this.options.height / this.options.width) * width;
-    //   this.options.width = width;
-    //   this.options.height = height;
-    //   return $(".slidesjs-control, .slidesjs-container", $element).css({
-    //     width: width,
-    //     height: height
-    //   });
-    // };
-
-/*
-
-    Plugin.prototype.update = function() {
-      var $element, height, width;
-      $element = $(this.element);
-      this.data = $.data(this);
-      $(".slidesjs-control", $element).children(":not(:eq(" + this.data.current + "))").css({
-        display: "none",
-        left: 0,
-        zIndex: 0
-      });
-      width = $element.width();
-      height = (this.options.height / this.options.width) * width;
-      this.options.width = width;
-      this.options.height = height;
-      return $(".slidesjs-control, .slidesjs-container", $element).css({
-        width: width,
-        height: height
-      });
-    };
-    Plugin.prototype.next = function(effect) {
-      var $element;
-      $element = $(this.element);
-      this.data = $.data(this);
-      $.data(this, "direction", "next");
+    Slidesjs.prototype.next = function(effect) {
+      /* TODO: check this commented part
       if (effect === void 0) {
         effect = this.options.navigation.effect;
       }
-      if (effect === "fade") {
-        return this._fade();
+      */
+      this.data.direction = 'next';
+      if ( effect === 'fade') {
+        this._fade();
       } else {
-        return this._slide();
+        this._slide();
       }
     };
-    Plugin.prototype.previous = function(effect) {
-      var $element;
-      $element = $(this.element);
-      this.data = $.data(this);
-      $.data(this, "direction", "previous");
-      if (effect === void 0) {
-        effect = this.options.navigation.effect;
-      }
-      if (effect === "fade") {
-        return this._fade();
+
+    Slidesjs.prototype.previous = function(effect) {
+      this.data.direction = 'previous';
+      if ( effect === 'fade' ) {
+        this._fade();
       } else {
-        return this._slide();
+        this._slide();
       }
     };
-    Plugin.prototype.goto = function(number) {
-      var $element, effect;
-      $element = $(this.element);
-      this.data = $.data(this);
-      if (effect === void 0) {
-        effect = this.options.pagination.effect;
-      }
-      if (number > this.data.total) {
+
+    Slidesjs.prototype.goTo = function(number) {
+      var effect = this.options.pagination.effect;
+
+      if ( number > this.data.total ){
         number = this.data.total;
-      } else if (number < 1) {
+      } else if ( number < 1 ){
         number = 1;
       }
+
+      // TODO: refactor once functions are in place
       if (typeof number === "number") {
         if (effect === "fade") {
           return this._fade(number);
@@ -407,168 +386,144 @@
         }
       }
     };
-    Plugin.prototype._setuptouch = function() {
-      var $element, next, previous, slidesControl;
-      $element = $(this.element);
-      this.data = $.data(this);
-      slidesControl = $(".slidesjs-control", $element);
+
+    Slidesjs.prototype._setuptouch = function() {
+      var next, previous, nextSl, previousSl;
       next = this.data.current + 1;
       previous = this.data.current - 1;
+      // TODO: refactor
       if (previous < 0) {
         previous = this.data.total - 1;
       }
       if (next > this.data.total - 1) {
         next = 0;
       }
-      slidesControl.children(":eq(" + next + ")").css({
-        display: "block",
-        left: this.options.width
-      });
-      return slidesControl.children(":eq(" + previous + ")").css({
-        display: "block",
-        left: -this.options.width
-      });
+      // TODO: probably these elements should be better off being stored in the this.data
+      // to be reused elsewhere.
+      nextSl = this.slidesControl.children[next]; 
+      nextSl.style.display = 'block';
+      nextSl.style.left = this.data.width;
+
+      previousSl = this.slidesControl.children[previous]; 
+      previousSl.style.display = 'block';
+      previousSl.style.left = -this.data.width;
     };
-    Plugin.prototype._touchstart = function(e) {
-      var $element, touches;
-      $element = $(this.element);
-      this.data = $.data(this);
-      touches = e.originalEvent.touches[0];
+
+    Slidesjs.prototype._touchstart = function(e){
+      var touches;
+
+      touches = e.touches[0];
       this._setuptouch();
-      $.data(this, "touchtimer", Number(new Date()));
-      $.data(this, "touchstartx", touches.pageX);
-      $.data(this, "touchstarty", touches.pageY);
-      return e.stopPropagation();
+      console.log(e);
+      this.data.touchTimer = Number(new Date());
+      this.data.touchStartX = touches.pageX;
+      this.data.touchStartY = touches.pageY;
+
+      // TODO: check if stopping prop. is indeed needed
+      e.stopPropagation();
     };
-    Plugin.prototype._touchend = function(e) {
-      var $element, duration, prefix, slidesControl, timing, touches, transform,
+
+    Slidesjs.prototype._touchend = function(e){
+      console.log('touchend');
+
+      var duration, prefix, timing, touches, transform,
         _this = this;
-      $element = $(this.element);
-      this.data = $.data(this);
-      touches = e.originalEvent.touches[0];
-      slidesControl = $(".slidesjs-control", $element);
-      if (slidesControl.position().left > this.options.width * 0.5 || slidesControl.position().left > this.options.width * 0.1 && (Number(new Date()) - this.data.touchtimer < 250)) {
-        $.data(this, "direction", "previous");
-        this._slide();
-      } else if (slidesControl.position().left < -(this.options.width * 0.5) || slidesControl.position().left < -(this.options.width * 0.1) && (Number(new Date()) - this.data.touchtimer < 250)) {
-        $.data(this, "direction", "next");
-        this._slide();
+
+      touches = e.touches[0];
+
+      // get the current position of the slideControl div, later turning it to absolute as we're
+      // not interested in direction here but only on the amout of 'movement' the image gets
+      var slidePos = this.slidesControl.offsetLeft;
+
+      if ( Math.abs(slidePos) > this.data.width * 0.5 || // TODO: check these timers accuracy
+           Math.abs(slidePos) > this.data.width * 0.1 && (Number(new Date()) - this.data.touchTimer < 250)){
+          this.data.direction = slidePos > 0 ? 'previous' : 'next';
+
+          this._slide();
       } else {
-        prefix = this.data.vendorPrefix;
-        transform = prefix + "Transform";
-        duration = prefix + "TransitionDuration";
-        timing = prefix + "TransitionTimingFunction";
-        slidesControl[0].style[transform] = "translateX(0px)";
-        slidesControl[0].style[duration] = this.options.effect.slide.speed * 0.85 + "ms";
+          // Slide has not been dragged far enough, animate back to 0 and reset
+          console.log(this.slidesControl);  
+          console.log( slidePos, this.data.width * 0.5 );
+
+          transform = prefix + "Transform";
+          duration = prefix + "TransitionDuration";
+          timing = prefix + "TransitionTimingFunction";
+
+          // TODO: refactor maybe? or leave it there and gradually remove as prefix gets ditched
+          // from browsers. IE9 will always need ms prefix but supports no transitions.
+          // Refactor as later on the same styles get updaed.
+          this.slidesControl.style.webkitTransform = "translateX(0px)";
+          this.slidesControl.style.msTransform     = "translateX(0px)";
+          this.slidesControl.style.transform       = "translateX(0px)";
+
+          // webkit prefix is needed only for old IOS + blackberry. This line will be removed
+          this.slidesControl.style.webkitTransition = this.options.effect.slide.speed * 0.85 + 'ms'; 
+          this.slidesControl.style.transition       = this.options.effect.slide.speed * 0.85 + 'ms'; 
+
       }
-      slidesControl.on("transitionend webkitTransitionEnd oTransitionEnd otransitionend MSTransitionEnd", function() {
-        prefix = _this.data.vendorPrefix;
-        transform = prefix + "Transform";
-        duration = prefix + "TransitionDuration";
-        timing = prefix + "TransitionTimingFunction";
-        slidesControl[0].style[transform] = "";
-        slidesControl[0].style[duration] = "";
-        return slidesControl[0].style[timing] = "";
+      // TODO: #IMPORTANT this listener gets set every time the touch ends. Check where to add it so that it's added only once
+      this.slidesControl.addEventListener('transitionEnd', function(){
+        _this._touchendCallback.apply(_this);
       });
-      return e.stopPropagation();
+      this.slidesControl.addEventListener('webkitTransitionEnd', function(){
+        _this._touchendCallback.apply(_this);
+      });
+
+      e.stopPropagation();
     };
-    Plugin.prototype._touchmove = function(e) {
-      var $element, prefix, slidesControl, touches, transform;
-      $element = $(this.element);
-      this.data = $.data(this);
-      touches = e.originalEvent.touches[0];
-      prefix = this.data.vendorPrefix;
-      slidesControl = $(".slidesjs-control", $element);
-      transform = prefix + "Transform";
-      $.data(this, "scrolling", Math.abs(touches.pageX - this.data.touchstartx) < Math.abs(touches.pageY - this.data.touchstarty));
-      if (!this.data.animating && !this.data.scrolling) {
+
+    Slidesjs.prototype._touchendCallback= function(){
+        // DONT remove this callback until this method gets attached properly, see above TODO.
+        console.log('ended');
+        this.slidesControl.style.webkitTransform = "";
+        this.slidesControl.style.msTransform     = "";
+        this.slidesControl.style.transform       = "";
+
+        // webkit prefix is needed only for old IOS + blackberry. This line will be removed
+        this.slidesControl.style.webkitTransition = ''; 
+        this.slidesControl.style.transition       = ''; 
+    };  
+
+    Slidesjs.prototype._touchmove = function(e) {
+      console.log('moving');
+      var prefix, touches, transform;
+
+      touches = e.touches[0];
+      // Check if user is trying to scroll vertically
+      this.data.scrolling = Math.abs(touches.pageX - this.data.touchStartX) < Math.abs(touches.pageY - this.data.touchStartY);
+
+      console.log(this.data.scrolling)
+      if( !this.data.animating && !this.data.scrolling ){
+        // TODO: check this preventdef
         e.preventDefault();
         this._setuptouch();
-        slidesControl[0].style[transform] = "translateX(" + (touches.pageX - this.data.touchstartx) + "px)";
+        this.slidesControl.style.webkitTransform =  'translateX(' + (touches.pageX - this.data.touchstartx) + 'px';
+        this.slidesControl.style.transform       =  'translateX(' + (touches.pageX - this.data.touchstartx) + 'px';
       }
-      return e.stopPropagation();
+      e.stopPropagation();
     };
-    Plugin.prototype.play = function(next) {
-      var $element, currentSlide, slidesContainer,
-        _this = this;
-      $element = $(this.element);
-      this.data = $.data(this);
-      if (!this.data.playInterval) {
-        if (next) {
-          currentSlide = this.data.current;
-          this.data.direction = "next";
-          if (this.options.play.effect === "fade") {
-            this._fade();
-          } else {
-            this._slide();
-          }
-        }
-        $.data(this, "playInterval", setInterval((function() {
-          currentSlide = _this.data.current;
-          _this.data.direction = "next";
-          if (_this.options.play.effect === "fade") {
-            return _this._fade();
-          } else {
-            return _this._slide();
-          }
-        }), this.options.play.interval));
-        slidesContainer = $(".slidesjs-container", $element);
-        if (this.options.play.pauseOnHover) {
-          slidesContainer.unbind();
-          slidesContainer.bind("mouseenter", function() {
-            return _this.stop();
-          });
-          slidesContainer.bind("mouseleave", function() {
-            if (_this.options.play.restartDelay) {
-              return $.data(_this, "restartDelay", setTimeout((function() {
-                return _this.play(true);
-              }), _this.options.play.restartDelay));
-            } else {
-              return _this.play();
-            }
-          });
-        }
-        $.data(this, "playing", true);
-        $(".slidesjs-play", $element).addClass("slidesjs-playing");
-        if (this.options.play.swap) {
-          $(".slidesjs-play", $element).hide();
-          return $(".slidesjs-stop", $element).show();
-        }
-      }
-    };
-    Plugin.prototype.stop = function(clicked) {
-      var $element;
-      $element = $(this.element);
-      this.data = $.data(this);
-      clearInterval(this.data.playInterval);
-      if (this.options.play.pauseOnHover && clicked) {
-        $(".slidesjs-container", $element).unbind();
-      }
-      $.data(this, "playInterval", null);
-      $.data(this, "playing", false);
-      $(".slidesjs-play", $element).removeClass("slidesjs-playing");
-      if (this.options.play.swap) {
-        $(".slidesjs-stop", $element).hide();
-        return $(".slidesjs-play", $element).show();
-      }
-    };
-    Plugin.prototype._slide = function(number) {
-      var $element, currentSlide, direction, duration, next, prefix, slidesControl, timing, transform, value,
-        _this = this;
-      $element = $(this.element);
-      this.data = $.data(this);
+
+    // number = slide number on bottom navigation
+    Slidesjs.prototype._slide = function(number){
+      var currentSlide, direction, duration, next, timing, transform, value,
+            _this = this;
+
+      console.log('current form begin slide is: ' + this.data.current)
+        //this.data.current = number + 1;
+      // TODO: check if this.data.current is set and updated to make sure the
+      // following code runs. HEAVY refactor
       if (!this.data.animating && number !== this.data.current + 1) {
-        $.data(this, "animating", true);
-        currentSlide = this.data.current;
+        this.data.animating = true;
         if (number > -1) {
           number = number - 1;
-          value = number > currentSlide ? 1 : -1;
-          direction = number > currentSlide ? -this.options.width : this.options.width;
-          next = number;
+          value = number > this.data.current ? 1 : -1;
+          direction = number > this.data.current ? -this.data.width : this.data.width;
+          next = number; 
+
         } else {
           value = this.data.direction === "next" ? 1 : -1;
-          direction = this.data.direction === "next" ? -this.options.width : this.options.width;
-          next = currentSlide + value;
+          direction = this.data.direction === "next" ? -this.data.width : this.data.width;
+          next = this.data.current + value;
         }
         if (next === -1) {
           next = this.data.total - 1;
@@ -577,70 +532,133 @@
           next = 0;
         }
         this._setActive(next);
-        slidesControl = $(".slidesjs-control", $element);
         if (number > -1) {
-          slidesControl.children(":not(:eq(" + currentSlide + "))").css({
-            display: "none",
-            left: 0,
-            zIndex: 0
+          Array.prototype.forEach.call(this.slides, function(el, idx){
+            if( _this.data.current !== idx){
+              el.style.display = 'none';
+              el.style.left = 0;
+              el.style.zIndex = 0;
+            }
           });
         }
-        slidesControl.children(":eq(" + next + ")").css({
-          display: "block",
-          left: value * this.options.width,
-          zIndex: 10
+        this.slides[ next ].style.display = 'block';
+        this.slides[ next ].style.left = value * this.options.width;
+        this.slides[ next ].style.zIndex = 10;
+
+        //this.options.callback.start(this.data.current + 1);
+
+        // the below part is modern browsers only, put it in an if statement if
+        // alternative for older ones is needed
+        this.slidesControl.style.webkitTransform = 'translateX(' + direction + 'px)';
+        this.slidesControl.style.webkitTransition = this.options.effect.slide.speed + 'ms';
+
+        // TODO: this event is attached at every slide, move this part out soit's
+        // attached only once.
+        this.slidesControl.addEventListener('webkitTransitionend', function(){
+          _this._slideCallback.call(_this, next);
         });
-        this.options.callback.start(currentSlide + 1);
-        if (this.data.vendorPrefix) {
-          prefix = this.data.vendorPrefix;
-          transform = prefix + "Transform";
-          duration = prefix + "TransitionDuration";
-          timing = prefix + "TransitionTimingFunction";
-          slidesControl[0].style[transform] = "translateX(" + direction + "px)";
-          slidesControl[0].style[duration] = this.options.effect.slide.speed + "ms";
-          return slidesControl.on("transitionend webkitTransitionEnd oTransitionEnd otransitionend MSTransitionEnd", function() {
-            slidesControl[0].style[transform] = "";
-            slidesControl[0].style[duration] = "";
-            slidesControl.children(":eq(" + next + ")").css({
-              left: 0
-            });
-            slidesControl.children(":eq(" + currentSlide + ")").css({
-              display: "none",
-              left: 0,
-              zIndex: 0
-            });
-            $.data(_this, "current", next);
-            $.data(_this, "animating", false);
-            slidesControl.unbind("transitionend webkitTransitionEnd oTransitionEnd otransitionend MSTransitionEnd");
-            slidesControl.children(":not(:eq(" + next + "))").css({
-              display: "none",
-              left: 0,
-              zIndex: 0
-            });
-            if (_this.data.touch) {
-              _this._setuptouch();
+        this.slidesControl.addEventListener('transitionend', function(){
+          _this._slideCallback.call(_this, next);
+        });
+      } 
+      console.log('current form end slide is: ' + this.data.current)
+      console.log('current "next" is: ' + this.data.current)
+
+    };    
+
+    Slidesjs.prototype._slideCallback = function(next) {
+      var _this = this;
+      this.slidesControl.style.webkitTransform = '';
+      this.slidesControl.style.webkitTransition = '';
+      this.slides[ next ].style.left = 0;
+      this.slides[ this.data.current ].display = 'none';
+      this.slides[ this.data.current ].left = 0;
+      this.slides[ this.data.current ].zIndex = 0;
+
+      this.data.current = next;
+      this.data.animating = false;
+      // TODO: remember to remove this parte once the event is attached only once
+      this.slidesControl.removeEventListener('webkitTransitionend');      
+      this.slidesControl.removeEventListener('transitionend');  
+
+      // TODO: this event is identical as above, refactor.
+      Array.prototype.forEach.call(this.slides, function(el, idx){
+        if( _this.data.current !== idx){
+          el.style.display = 'none';
+          el.style.left = 0;
+          el.style.zIndex = 0;
+        }
+      });    
+
+      if (_this.data.touch) {
+        _this._setuptouch();
+      }
+      // TODO: this callback does not check for its existence and throws error
+      //_this.options.callback.complete(next + 1);
+    };
+
+    Slidesjs.prototype.play = function(next) {
+      var _this = this;
+
+      if( !this.data.playInterval ){
+        if( next ){
+          console.log('played');
+          this.data.direction = 'next';
+          if( this.options.play.effect === 'fade' ){
+            this._fade();
+          } else {
+            this._slide();
+          }
+        }
+        // move this outside
+        this.data.playInterval = function(){
+          // TODO: rewrite with a recursive setTimeout
+          setInterval(function(){
+            _this.data.direction = 'next';
+            if (_this.options.play.effect === "fade") {
+              _this._fade();
+            } else {
+              _this._slide();
             }
-            return _this.options.callback.complete(next + 1);
+          }, this.options.play.interval);
+        };
+        if (this.options.play.pauseOnHover) {
+          this.slidesContainer.addEventListener('mouseenter', function(){
+            _this.stop();
           });
-        } else {
-          return slidesControl.stop().animate({
-            left: direction
-          }, this.options.effect.slide.speed, (function() {
-            slidesControl.css({
-              left: 0
-            });
-            slidesControl.children(":eq(" + next + ")").css({
-              left: 0
-            });
-            return slidesControl.children(":eq(" + currentSlide + ")").css({
-              display: "none",
-              left: 0,
-              zIndex: 0
-            }, $.data(_this, "current", next), $.data(_this, "animating", false), _this.options.callback.complete(next + 1));
-          }));
+          this.slidesContainer.addEventListener('mouseleave', function(){
+              setTimeout((function() {
+                _this.play(true);
+              }), _this.options.play.restartDelay || 1 );
+          });
+        }
+        this.data.playing = true;
+        this.playButton.classList.add('slidesjs-playing');
+        if( this.options.play.swap ){
+          this.playButton.style.display = 'none';
+          this.stopButton.style.display = 'block';
         }
       }
     };
+
+    Slidesjs.prototype.stop = function(clicked) {
+      console.log('stopped')
+      clearInterval(this.data.playInterval);
+
+      if ( this.options.play.pauseOnHover && clicked ){
+        // TODO: WTF?????
+        //$(".slidesjs-container", $element).unbind();
+        alert('check');
+      }
+      this.data.playInterval = null;
+      this.data.playing = null;
+      this.playButton.classList.remove('slidesjs-playing');
+      if (this.options.play.swap) {
+        this.stopButton.display = 'none';
+        this.playButton.display = 'block';
+      }
+    }
+/*
     Plugin.prototype._fade = function(number) {
       var $element, currentSlide, next, slidesControl, value,
         _this = this;

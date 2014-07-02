@@ -322,6 +322,7 @@
       this.data = $.data(this);
       touches = e.originalEvent.touches[0];
       slidesControl = $(".slidesjs-control", $element);
+      console.log(slidesControl.position());
       if (slidesControl.position().left > this.options.width * 0.5 || slidesControl.position().left > this.options.width * 0.1 && (Number(new Date()) - this.data.touchtimer < 250)) {
         $.data(this, "direction", "previous");
         this._slide();
@@ -337,6 +338,7 @@
         slidesControl[0].style[duration] = this.options.effect.slide.speed * 0.85 + "ms";
       }
       slidesControl.on("transitionend webkitTransitionEnd oTransitionEnd otransitionend MSTransitionEnd", function() {
+        console.log('msg')
         prefix = _this.data.vendorPrefix;
         transform = prefix + "Transform";
         duration = prefix + "TransitionDuration";
